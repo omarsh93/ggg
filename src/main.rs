@@ -8,16 +8,28 @@
 // [dependencies]
 // tokio = { version = "1", features = ["full"] }
 
+//use std::fs;
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
 
+struct Config {
+    listen: String,
+}
+
+use std::{env, fs, path::PathBuf};
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind("0.0.0.0:5555").await?;
+    //let config = load_config("proxy.conf")?;
+    let config = load_config()?;
 
-    println!("proxy listening on 0.0.0.0:5555");
+    let listener = TcpListener::bind(&config.listen).await?;
+
+    println!("proxy listening on {}", config.listen);
 
     loop {
         let (client, addr) = listener.accept().await?;
@@ -31,6 +43,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 }
+
+fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
+    let home = env::var("HOME")?;
+
+    let path: PathBuf = [
+        home.as_str(),
+        ".config",
+        "ggg",
+        "proxy.conf",
+    ]
+    .iter()
+    .collect();
+
+    let text = fs::read_to_string(&path)?;
+
+    let mut listen = "0.0.0.0:8080".to_string();
+
+    for line in text.lines() {
+        let line = line.trim();
+
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix("listen=") {
+            listen = value.trim().to_string();
+        }
+    }
+
+    Ok(Config { listen })
+}
+
 
 async fn handle_client(
     mut client: TcpStream,
@@ -49,7 +93,6 @@ async fn handle_client(
 
     println!("request: {}", first_line);
 
-    // CONNECT method
     if first_line.starts_with("CONNECT ") {
         handle_connect(client, &req).await?;
     } else {
@@ -65,8 +108,6 @@ async fn handle_connect(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let first_line = req.lines().next().unwrap();
 
-    // CONNECT example:
-    // CONNECT example.com:443 HTTP/1.1
     let target = first_line
         .split_whitespace()
         .nth(1)

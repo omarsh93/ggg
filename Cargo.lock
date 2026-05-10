@@ -31,6 +31,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ggg"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -126,13 +133,6 @@ checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
  "errno",
  "libc",
-]
-
-[[package]]
-name = "simple_proxy"
-version = "0.1.0"
-dependencies = [
- "tokio",
 ]
 
 [[package]]
