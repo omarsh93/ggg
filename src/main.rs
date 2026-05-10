@@ -1,0 +1,120 @@
+// Cargo.toml
+//
+// [package]
+// name = "simple_proxy"
+// version = "0.1.0"
+// edition = "2024"
+//
+// [dependencies]
+// tokio = { version = "1", features = ["full"] }
+
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("0.0.0.0:5555").await?;
+
+    println!("proxy listening on 0.0.0.0:5555");
+
+    loop {
+        let (client, addr) = listener.accept().await?;
+
+        println!("accepted: {}", addr);
+
+        tokio::spawn(async move {
+            if let Err(e) = handle_client(client).await {
+                eprintln!("error: {}", e);
+            }
+        });
+    }
+}
+
+async fn handle_client(
+    mut client: TcpStream,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut buf = [0u8; 8192];
+
+    let n = client.read(&mut buf).await?;
+
+    if n == 0 {
+        return Ok(());
+    }
+
+    let req = String::from_utf8_lossy(&buf[..n]);
+
+    let first_line = req.lines().next().unwrap_or("");
+
+    println!("request: {}", first_line);
+
+    // CONNECT method
+    if first_line.starts_with("CONNECT ") {
+        handle_connect(client, &req).await?;
+    } else {
+        handle_http(client, &buf[..n], &req).await?;
+    }
+
+    Ok(())
+}
+
+async fn handle_connect(
+    mut client: TcpStream,
+    req: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let first_line = req.lines().next().unwrap();
+
+    // CONNECT example:
+    // CONNECT example.com:443 HTTP/1.1
+    let target = first_line
+        .split_whitespace()
+        .nth(1)
+        .ok_or("invalid CONNECT")?;
+
+    println!("CONNECT target: {}", target);
+
+    let mut server = TcpStream::connect(target).await?;
+
+    client
+        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .await?;
+
+    tokio::io::copy_bidirectional(&mut client, &mut server).await?;
+
+    Ok(())
+}
+
+async fn handle_http(
+    mut client: TcpStream,
+    first_packet: &[u8],
+    req: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let host = extract_host(req).ok_or("Host header not found")?;
+
+    let target = if host.contains(':') {
+        host
+    } else {
+        format!("{}:80", host)
+    };
+
+    println!("HTTP target: {}", target);
+
+    let mut server = TcpStream::connect(target).await?;
+
+    server.write_all(first_packet).await?;
+
+    tokio::io::copy_bidirectional(&mut client, &mut server).await?;
+
+    Ok(())
+}
+
+fn extract_host(req: &str) -> Option<String> {
+    for line in req.lines() {
+        if line.to_ascii_lowercase().starts_with("host:") {
+            return Some(line[5..].trim().to_string());
+        }
+    }
+
+    None
+}
