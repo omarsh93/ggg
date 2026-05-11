@@ -50,7 +50,7 @@ fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     let path: PathBuf = [
         home.as_str(),
         ".config",
-        "ggg",
+        "wakala",
         "proxy.conf",
     ]
     .iter()
